@@ -1,0 +1,1121 @@
+---
+title: "Master 1 MAS Rennes - Classification Supervisée - Projet semestrielle"
+subtitle: "Prédiction & e-Sport : match classés de haut rang sur League Of Legends"
+author: "MONFRET Dylan"
+date: "28 avril 2020"
+output:
+  html_notebook:
+    theme: spacelab
+    highlights: tango
+    df_print: paged
+    number_sections: yes
+    css: style_discri_proj.css
+---
+
+Le jeu vidéo représente aujourd'hui un marché florissant qui poursuit son expansion sous diverses formes, en particulier le jeu mobile. C'est un marché qui a généré près de [4,8 milliards d'euros en France en 2019](https://www.sell.fr/lindustrie) faisant du jeu vidéo une industrie culturelle majeure. Si majeure, qu'à l'instar du cinéma ou de la musique, le jeu vidéo et ses acteurs sont désormais récompensés pour leur créativité ou leur popularité lors de cérémonies dédiées telles que les [Game Awards](https://thegameawards.com/) ou à l'occasion de festival du jeu vidéo comme le [Stunfest de Rennes](https://www.stunfest.com/indie2020/). Le jeu vidéo est alors ici récompensé comme un art avec lequel on interagit. 
+
+C'est également un média qui intéresse certains à un autre niveau : la compétition. [L'e-sport](https://fr.wikipedia.org/wiki/Esport) (*electronic sport*), scène compétitive du jeu vidéo, attire encore et toujours plus d'acteurs chaque année (joueurs, spectateurs, investisseurs, etc.). Au plus petit niveau d'abord avec [1,3 millions d'e-sportif amateur en France en 2019](https://www.france-esports.org/barometre-france-esports-resultats-de-ledition-2019/), mais aussi au plus haut niveau avec des organismes (équipes, grands éditeurs de jeu, société d'organisation des évènements) qui se structurent  et professionnalisent certaines scènes e-sportives. Le développement de ce marché a entrainé l'intégration d'organismes sportifs historiques comme les clubs de football du [FC Barcelone](https://www.fcbarcelona.fr/fr/club/actualites/1595318/rocket-league-team-starts-rlcs-9-on-sunday) ou du [Paris Saint-Germain](https://twitter.com/PSGeSports), ou à des entreprises plus classiques comme [Renault](https://vitality.gg/fr/sponsor/renault/), contribuant au développement de l'e-sport que ce soit par la structuration d'équipe, par la structuration de staff de joueur ou d'équipe, par l'établissant de partenariats avec des structures existantes, etc. 
+
+Et aujourd'hui, les sphères compétitives sont mêlées aux données de toutes sortes. Cela est de plus en plus vrai concernant le monde du sport classique, mais cela a toujours été plus ou moins le cas pour le jeu vidéo et donc l'e-sport. Statistiques personnelles, statistiques d'équipe,  notes, mesures d'efficacité ou encore temps de jeu permettent d'analyser les bons et mauvais points d'une partie pour définir les meilleurs axes d'amélioration pour chaque joueur. Pour les développeurs et les acteurs extérieurs, l'intérêt est ailleurs : calcul du niveau global, observation des données pour établir des correctifs de jeu, calcul d'attribution des points... Et ce qui va nous intéresser : __la prédiction de résultat__.
+
+Dans le cadre de ce projet de classification supervisée, nous allons nous pencher sur l'aspect compétitif d'un [jeu vidéo de type arène de bataille en ligne (MOBA)](https://fr.wikipedia.org/wiki/Ar%C3%A8ne_de_bataille_en_ligne_multijoueur), très certainement le plus populaire des deux dernières décennies : __League of Legends__. [En battant de nouveaux records d'audience](https://www.team-aaa.com/fr/actualite/worlds-2019-une-annee-record-pour-riot-games_115078) lors de son mondiale en octobre et novembre 2019 (dont la finale se déroulait à l'Accord Hôtel Arena de Paris), le MOBA de Riot Games s'impose encore et toujours comme [la référence des jeux compétitifs](https://twitter.com/RomainBigeard/status/1255058040497352704).
+
+Notre objectif ici sera de savoir ce qui sépare les gagnants des perdants, ou plutôt de définir une méthode de classification qui sépare les gagnants des perdants dans le jeu League of Legends.
+
+# Présentation des données
+
+## Packages utilisés
+
+```{r, warning=FALSE, message=FALSE}
+library(car)
+library(caret)
+library(doParallel)
+library(klaR)
+library(MASS)
+library(plotROC)
+library(pROC)
+library(ranger)
+library(rpart)
+library(tidyverse)
+```
+
+## Qu'est-ce que [League Of Legends](https://fr.wikipedia.org/wiki/League_of_Legends) ?
+
+> *League of Legends (abrégé LoL), anciennement nommé League of Legends: Clash of Fates est un jeu vidéo de type arène de bataille en ligne (MOBA) gratuit développé et édité par Riot Games sur Windows et Mac OS X. Le jeu a été évoqué pour la première fois le 7 octobre 2008 et est entré en phase bêta le 10 avril 2009 pour finalement sortir au grand public le 27 octobre 2009.*
+
+> *Dans League of Legends, le joueur contrôle un champion aux compétences uniques dont la puissance augmente au fil de la partie se battant contre une équipe de joueurs en temps réel la plupart du temps. L'objectif d'une partie est, dans la quasi-totalité des modes de jeu, de détruire le « Nexus » ennemi, bâtiment situé au cœur de la base adverse protégé par des tourelles et inhibiteurs. [...]*
+
+> *League of Legends devient rapidement un véritable phénomène. C'est en 2013 qu'il devient l'un des jeux les plus joués au monde. Il séduit aussi le monde du sport électronique en devenant l'événement eSport le plus regardé de l'histoire, avec plus de 32 millions de spectateurs en ligne et plus de 8,5 millions de vues simultanées lors de la finale de la saison 3 du championnat du monde en 2013. Le record est de nouveau battu chaque année suivante et le dernier record en date remonte au dernier championnat du monde, en 2019, avec plus de 44 millions de spectateurs simultanés aux pics d'audience.*
+
+## Sujet, source & problématique métier
+
+Les données qui seront exploitées lors de l'étude ont été fournie par l'utilisateur Kaggle [Minyong Shin](https://www.kaggle.com/gyejr95). C'est un jeu de données regroupant les résultats de plus de 26 000 matchs dans la division (ou *"elo"*) "Challenger", rang le plus élevé du jeu ; données récupérées avec l'API de l'éditeur, [Riot Games API](https://developer.riotgames.com/). L'équipe bleu affronte l'équipe rouge en une manche gagnante sans possibilité de match nul. Dans ce contexte, nous ne savons rien de la nature des équipes, si elles sont composées de joueurs qui s'entendent bien (pouvant même former une équipe bien structurée), des conditions de matchs de chacune des équipes ou de si des joueurs professionnels ont pris part ou non à certains matchs. Nous savons uniquement que ces matchs concernent a priori de très bons joueurs. Les informations concernant les données sont retrouvables [ici](https://www.kaggle.com/gyejr95/league-of-legends-challenger-ranked-games2020#Challenger_Ranked_Games.csv).
+
+*__Tout l'objectif ici est de concevoir une méthode qui pourra dire, en fonction des performances des dites équipes, qui de l'équipe bleu ou de l'équipe rouge a gagné le match.__* Le détail des variables se retrouve dans la partie suivante.
+
+<p class="emp">Jeu de données de bases (5 premières lignes)</p> 
+
+```{r, message=FALSE}
+Challenger <- read_csv("Challenger_Ranked_Games.csv") %>% unique()
+head(Challenger, 5)
+```
+
+## Analyse & modifications préalables
+
+### Réflexions préliminaires autour des données
+
+Avant de commencer l'étude en profondeur et la création de modèle, penchons-nous sur le sens des variables en elles même. Elle représente les statistiques de partie opposant deux équipes, par conséquent les variables concernant une équipe dépendent des variables de l'équipe adverse. Une équipe qui réalise plus de kill va mécaniquement entrainer plus de mort dans le camp adverse par exemple. Ces variables d'opposition, que l'on repère à leur syntaxe similaire (préfixées par `red`/`blue`) sont très corrélés entre elle. Les variables issues des mécaniques du jeu sont aussi corrélées entre elles fortement. Par exemple, les *golds* (argent du jeu amassé en cours de partie) s'accumule en même temps que l'expérience qui fait monter le niveau du champion que l’on contrôle pendant la partie. De ce fait, `blueAvgLevel` (niveau moyen des champions de l’équipe en fin de partie de l’équipe bleu) sera fortement corrélées linéairement à `blueTotaGold`.
+
+```{r}
+Chall_num <- Challenger %>% select_if(is.numeric)
+
+Correlations <-
+  cor(Chall_num) %>%
+  abs %>%
+  as.data.frame() %>%
+  mutate(var1 = rownames(.)) %>%
+  gather(var2, Corre,-var1) %>%
+  arrange(desc(Corre)) %>%
+  group_by(Corre) %>%
+  filter(var1 != var2 & row_number() %% 2 != 0)
+
+High_Correlations <-
+  Correlations %>%
+  filter(Corre >= 0.5)
+
+head(High_Correlations, 10)
+```
+
+Enfin, il existe dans ce jeu de données de base des duos de variables redondantes qui peut être remplacés par une variable catégorielle à 2 ou 3 modalités (comme `blueWins` valant 0 si l'équipe bleu gagne, 1 sinon ; et `redWins` réciproquement).
+
+Alors nous allons aborder deux méthodologies différentes par le biais de 2 jeux de données. Après avoir recodé les variables redondantes, nous aurons : 
+  
+  * Un jeu de données `Challenger1` contenant le plus d'informations (41 variables), y compris les variables d'opposition, pour avoir des modèles et des estimations complètes (qui peuvent mettre en évidence la relation d'une statistique par rapport à une autre). Ici, il faudra prêter attention à la réciprocité des variables (par exemple, si `blueTotaGold` est significatif dans un modèle et que `redTotaGold` ne l'est pas, que doit-on décider).
+  * Un jeu de données `Challenger2` avec presque moitié moins de données, composé d'un peu plus de variables catégorielles précisant qu'elle est la pire/meilleur équipe dans tel ou tel domaine (par exemple : *`BestTotGold`* -> "blue" si `blueTotaGold` > `redTotaGold`, "red" sinon).
+  
+Nous aurons donc des modèles et jeu de données d'apprentissage et de test qui prennent en compte des données plus dans le détail et d'autres modèles relevant plus de la comparaison de statistiques une à une des deux équipes. L'avantage du premier c'est qu'il sera a priori plus complet, plus précis sur chaque statistique de match que le second. Et l'avantage du second c'est qu'il sera moins lourd que le premier, et c'est assez important quant à la durée d'exécution des algorithmes sous **R**.
+
+### Modifications effectuées
+
+Le code servant au recodage de variable n'est pas disponible dans ce rendu HTML pour ne pas alourdir le rapport, mais l'intégralité des manipulations sont inscrit dans le `.Rmd` qui a généré cette page.
+
+<p class="emp">Pour les deux jeux de variables</p> 
+
+* Recodage des variables binaires de type "Première équipe à avoir fait le premier kill" (par exemple `blueFirstBlood` et `redFristBlood`) en variable de synthèse (ici `FirstBlood` tout court) pouvant prendre 3 modalités `{blue, red, none}`. 
+* La variable cible `Win_Team` ne prendra que 2 modalités $\{0, 1\}$ (0 si l'équipe gagnante est bleu, 1 sinon).
+* Suppression de variable redondante et inutile pour la suite  : `gameId` supprimé et `blue/redTotalLevel` supprimé pour ne garder que `blue/redAvgLevel` (le nombre de joueurs par équipe est toujours de 5, donc  `blue/redTotalLevel` = $5 \times$ `blue/redAvgLevel`).
+* Variable de la durée de la partie ré-orthographiée (`gameDuraton` -> `Duration`).
+
+<p class="emp">Pour `Challenger2` uniquement</p>
+
+* Recodage des variables de statistique de match (exemple : si `redKills` > `blueKills`, alors `MostKills` vaut "red", sinon la variable vaut "blue" ou "draw" en cas d'égalité.)
+
+```{r, echo=FALSE}
+Challenger1 <- Challenger %>%
+  # Re-codage des facteurs binaires
+  mutate(
+    FirstBlood = factor(if_else(
+      blueFirstBlood == 1,
+      "blue",
+      if_else(redFirstBlood == 1, "red", "none")
+    )),
+    FirstTower = factor(if_else(
+      blueFirstTower == 1,
+      "blue",
+      if_else(redFirstTower == 1, "red", "none")
+    )),
+    FirstBaron = factor(if_else(
+      blueFirstBaron == 1,
+      "blue",
+      if_else(redFirstBaron == 1, "red", "none")
+    )),
+    FirstDragon = factor(if_else(
+      blueFirstDragon == 1,
+      "blue",
+      if_else(redFirstDragon == 1, "red", "none")
+    )),
+    FirstInhibitor = factor(if_else(
+      blueFirstInhibitor == 1,
+      "blue",
+      if_else(redFirstInhibitor == 1, "red", "none")
+    )),
+    Win_Team = factor(if_else(
+      blueWins == 1, 0, 1))
+  ) %>%
+  # Suppression des anciennes variables des ID de match et renomage d'une variable
+  subset(
+    select = -c(
+      gameId,
+      blueWins,
+      redWins,
+      blueFirstBlood,
+      blueFirstTower,
+      blueFirstBaron,
+      blueFirstDragon,
+      blueFirstInhibitor,
+      redFirstBlood,
+      redFirstTower,
+      redFirstBaron,
+      redFirstDragon,
+      redFirstInhibitor,
+      # Suppressionde ces variables car une variable de type "niveau moyen" existe, et que le nombre de personne par équipe est toujours de 5.
+      blueTotalLevel,
+      redTotalLevel
+    )
+  ) %>%
+  rename(Duration = gameDuraton) %>% 
+  dplyr::select(sort(names(.)))
+```
+
+
+```{r, echo=FALSE, results='hide'}
+Challenger2 <-
+  Challenger1 %>%
+  mutate(MostDragonKills = factor(
+    if_else(
+      redDragonKills > blueDragonKills,
+      "red",
+      if_else(redDragonKills < blueDragonKills, "blue", "draw")
+    )
+  ),
+  MostBaronKills = factor(
+    if_else(
+      redBaronKills > blueBaronKills,
+      "red",
+      if_else(redBaronKills < blueBaronKills, "blue", "draw")
+    )
+  ),
+  MostTowerKills = factor(
+    if_else(
+      redTowerKills > blueTowerKills,
+      "red",
+      if_else(redTowerKills < blueTowerKills, "blue", "draw")
+    )
+  ),
+  MostInhibitorKills = factor(
+    if_else(
+      redInhibitorKills > blueInhibitorKills,
+      "red",
+      if_else(redInhibitorKills < blueInhibitorKills, "blue", "draw")
+    )
+  ),
+  MostWardPlaced = factor(
+    if_else(
+      redWardPlaced > blueWardPlaced,
+      "red",
+      if_else(redWardPlaced < blueWardPlaced, "blue", "draw")
+    )
+  ),
+  MostWardkills = factor(
+    if_else(
+      redWardkills > blueWardkills,
+      "red",
+      if_else(redWardkills < blueWardkills, "blue", "draw")
+    )
+  ),
+  MostKills = factor(
+    if_else(
+      redKills > blueKills,
+      "red",
+      if_else(redKills < blueKills, "blue", "draw")
+    )
+  ),
+  MostDeath = factor(
+    if_else(
+      redDeath > blueDeath,
+      "red",
+      if_else(redDeath < blueDeath, "blue", "draw")
+    )
+  ),
+  MostAssist = factor(
+    if_else(
+      redAssist > blueAssist,
+      "red",
+      if_else(redAssist < blueAssist, "blue", "draw")
+    )
+  ),
+  MostChampDmg = factor(
+    if_else(
+      redChampionDamageDealt > blueChampionDamageDealt,
+      "red",
+      if_else(redChampionDamageDealt < blueChampionDamageDealt, "blue", "draw")
+    )
+  ),
+  MostTotGold = factor(
+    if_else(
+      redTotalGold > blueTotalGold,
+      "red",
+      if_else(redTotalGold < blueTotalGold, "blue", "draw")
+    )
+  ),
+  MostMinionKills = factor(
+    if_else(
+      redTotalMinionKills > blueTotalMinionKills,
+      "red",
+      if_else(redTotalMinionKills < blueTotalMinionKills, "blue", "draw")
+    )
+  ),
+  BestAvgLevel = factor(
+    if_else(
+      redAvgLevel > blueAvgLevel,
+      "red",
+      if_else(redAvgLevel < blueAvgLevel, "blue", "draw")
+    )
+  ),
+  MostJglMinKills = factor(
+    if_else(
+      redJungleMinionKills > blueJungleMinionKills,
+      "red",
+      if_else(redJungleMinionKills < blueJungleMinionKills, "blue", "draw")
+    )
+  ),
+  MostKillSpree = factor(
+    if_else(
+      redKillingSpree > blueKillingSpree,
+      "red",
+      if_else(redKillingSpree < blueKillingSpree, "blue", "draw")
+    )
+  ),
+ MostTotHeal = factor(
+    if_else(
+      redTotalHeal > blueTotalHeal,
+      "red",
+      if_else(redTotalHeal < blueTotalHeal, "blue", "draw")
+    )
+  ),
+  MostObjDmg = factor(
+    if_else(
+      redObjectDamageDealt > blueObjectDamageDealt,
+      "red",
+      if_else(redObjectDamageDealt < blueObjectDamageDealt, "blue", "draw")
+    ))) 
+
+Challenger2 <-
+  Challenger2 %>%
+  subset(
+    select = -c(
+      blueAssist,
+      blueAvgLevel,
+      blueBaronKills,
+      blueChampionDamageDealt,
+      blueDeath,
+      blueDragonKills,
+      blueInhibitorKills,
+      blueJungleMinionKills,
+      blueKillingSpree,
+      blueKills,
+      blueObjectDamageDealt,
+      blueTotalGold,
+      blueTotalHeal,
+      blueTotalMinionKills,
+      blueTowerKills,
+      blueWardkills,
+      blueWardPlaced,
+      redAssist,
+      redAvgLevel,
+      redBaronKills,
+      redChampionDamageDealt,
+      redDeath,
+      redDragonKills,
+      redInhibitorKills,
+      redJungleMinionKills,
+      redKillingSpree,
+      redKills,
+      redObjectDamageDealt,
+      redTotalGold,
+      redTotalHeal,
+      redTotalMinionKills,
+      redTowerKills,
+      redWardkills,
+      redWardPlaced
+    )
+  ) %>%
+  dplyr::select(sort(names(.)))
+```
+
+```{r, echo=FALSE}
+rm(Chall_num, Correlations, High_Correlations)
+```
+
+## Variables des jeux de données
+
+### Résumés de `Challenger1` & `Challenger2`
+
+<p class="emp">5 premières lignes de `Challenger1` & `Challenger2`</p>
+
+```{r}
+head(Challenger1, 5)
+head(Challenger2, 5)
+```
+
+<p class="emp">Résumé de `Challenger1`</p>
+
+```{r}
+summary(Challenger1)
+```
+
+<p class="emp">Variances des variables numériques de `Challenger1` (aucune variance nulle) </p>
+
+```{r}
+Challenger1 %>% select_if(is.numeric) %>% sapply(., var) %>% as.data.frame %>% rename(., Variance = `.`)
+```
+
+<p class="emp">Résumé de `Challenger2`</p>
+
+```{r}
+summary(Challenger2)
+```
+
+<p class="emp">Correction de `Challenger2`</p>
+
+La modalité `draw` de certaines variables sera problématique pour la suite de l'étude (modalité prise une unique fois sur l'ensemble des données, rend la validation croisée impossible). On supprime les matchs concernés par ce cas de figure, soit l'équivalent de 3 parties sur les 26 848 initiales.
+
+```{r}
+Challenger2 <-
+  Challenger2 %>%
+  filter(MostChampDmg != "draw" & MostTotHeal != "draw" & MostTotGold != "draw") %>%
+  droplevels(.)
+```
+
+### Descriptions des variables
+
+<p class="emp">Variables communes à `Challenger1` & `Challenger2`</p>
+
+* `Win_Team` : __Variable cible__ - équipe gagnante (0 si bleu, 1 si rouge).
+* `FirstBlood` : équipe ayant abattue en premier un adversaire (la variable vaut `none` si aucun kill pendant la partie).
+* `FirstTower` : équipe ayant abattue en premier une tourelle  (éléments protégeant le Nexus, la variable vaut `none` si aucune tourelle n'est abattue pendant la partie).
+* `FirstBaron` : équipe ayant abattue en premier un Baron Nashor (monstre neutre du jeu donnant un bonus si on le bat, la variable vaut `none` si aucun Baron n'est abattu pendant la partie).
+* `FirstDragon` : équipe ayant abattue en premier un dragon (monstres neutres du jeu donnant différents types de bonus si on les bat, la variable vaut `none` si aucun dragon n'est abattu pendant la partie).
+* `FirstInhibitor` : équipe ayant abattue en premier un inhibiteur (structure qui empêche la sortie de super-sbires pour l'équipe adverse, la variable vaut `none` si aucun inhibiteur n'est abattu pendant la partie).
+* `Duration` : durée de la partie en seconde.
+
+<p class="emp">Variables numériques de `Challenger1`</p>
+
+* `blue/redKills` : nombre de morts (kill) de champion infligée à l'équipe adverse.
+* `blue/redKillingSpree` : nombre de fois où un membre de l'équipe a fait au moins 3 kill d’affilée.
+* `blue/redDeath` : nombre de morts de champion concédé.
+* `blue/redAssist` : nombre d'assists (coup important infligé avant la mort d'un champion adverse).
+* `blue/redAvgLevel` : niveau moyen des champions en fin de partie.
+* `blue/redBaronKills` : nombre de Barons Nashor abattu.
+* `blue/redChampionDamageDealt` : dommages totaux infligés à l'équipe adverse.
+* `blue/redDragonKills` : nombre de dragons abattus pendant la partie.
+* `blue/redInhibitorKills` : nombre d'inhibiteurs détruit pendant la partie.
+* `blue/redTotalMinionKills` : nombre de sbires abattus (monstres dirigés par l'IA aidant leur équipe respective).
+* `blue/redJungleMinionKills` : nombre de sbires abattus dans les zones Jungle du [terrain](https://assets.sport.francetvinfo.fr/sites/default/files/styles/large_16_9/public/2019-11/league-of-legends_0.jpg?h=0dbe07ae&itok=k8rVNILE).
+* `blue/redObjectDamageDealt` : dommages totaux infligés aux objets adverses.
+* `blue/redTotalGold` : somme de gold récupéré par l'équipe pendant la partie (argent du jeu servant à acheter des objets en cours de partie).
+* `blue/redTotalHeal` : somme des dommages soignées pendant la partie.
+* `blue/redTowerKills` : nombre de tourelles détruites pendant la partie.
+* `blue/redWardPlaced` : nombre de balises de vision placées pendant la partie (permet de voir plus loin sur le terrain).
+* `blue/redWardkills` : nombre de balises de vision adverse détruites pendant la partie.
+
+<p class="emp">Variables qualitatives de `Challenger2`</p>
+
+* `BestAvgLevel` : équipe avec le plus au niveau de champion moyen en fin de partie.
+* `MostAssist` : équipe qui a réalisé le plus d'assists.
+* `MostBaronKills` : équipe qui a abattu le plus de Baron Nashor.
+* `MostChampDmg` : équipe qui a réalisé le plus de dommage à l'équipe adverse.
+* `MostDeath` équipe qui a concédé le plus de mort de champion. 
+* `MostDragonKills` : équipe qui a abattu le plus de dragon.
+* `MostInhibitorKills` : équipe qui a détruit le plus d'inhibiteurs.
+* `MostMinionKills` : équipe qui a abattu le plus de sbire.
+* `MostJglMinKills` : équipe qui a abattu le plus de sbire dans les zones Jungle.
+* `MostKills` : équipe qui a infligé le plus de mort.
+* `MostKillSpree` : équipe qui a fait le plus de série de kill (rappel : une série -> 3 kill de suite minimum).
+* `MostObjDmg` : équipe qui a infligé le plus de dommage aux objets adverses.
+* `MostTotGold` : équipe avec le plus de gold en fin de partie.
+* `MostTotHeal` : équipe qui s'est soigné le plus pendant la partie.
+* `MostTowerKills` : équipe qui a abattu le plus de tourelle.
+* `MostWardPlaced` : équipe qui a placé le plus de balises de vision.
+* `MostWardkills` : équipe qui a abattu le plus de balises de vision adverses.
+
+<p class="emp">Note concernant  les variables *"Nombre de Kill"* et *"Nombre de morts concédés"*</p>
+
+* La mort d'un champion peut être provoqué par un champion adverse (grande majorité des cas) ou par un élément du jeu neutre (contrôlé par l'IA). De ce fait, l'équipe qui a concédé le moins de mort (`blue/redDeath`) n'est pas toujours celle qui a fait le plus de *"kill"* (`blue/redKills`).
+
+* Dans le jeu de données `Challenger2`, cela se traduit par les variables `MostDeath` ou `MostKills` qui ne valent pas toutes les deux "draw".
+
+* De  même pour `Challenger1`, la variable `blue/redKills` n'est pas toujours proportionnelle à la variable `blue/redDeath`.
+
+# Modélisations
+
+## Les algorithmes abordés et la méthode de travail
+
+Les algorithmes que nous allons utiliser pour cette étude doivent être conformes aux jeux de données que nous avons en main. 
+
+Premièrement, avec des variables  de nature différentes (quantitatives et qualitatives), nous ne pourrons pas utiliser des méthodes d'analyse discriminante (LDA, QDA ou RDA). Pour utiliser ces méthodes-ci, il faudrait adapter les variables qualitatives ce qui n'est pas faisable ici (il ne s'agit pas de classe d'âge que l'on peut recoder en un "âge moyen" pour revenir sur du quantitatif par exemple). Cela met aussi de côté la méthode des plus proches voisins : pour `Challenger1` nous avons des variables à la fois quantitative et qualitative, et pour `Challenger2` c'est la notion de distance qui pose problème puisque les variables qualitatives explicatives peuvent prendre jusqu'à 3 modalités (comment expliquer la distance entre la modalité "blue", la modalité "red" et la modalité "draw"/"none" ?).
+
+Ce que l'on peut faire en revanche, en guise de substitut, c'est des **régressions logistiques**, qui seront bien adaptées à notre problème puisque la variable cible est binaire. Ce qui fonctionne bien aussi dans notre cas, ce sont les **arbres de classification** et plus largement les **forêts aléatoires**. Et afin d'arriver aux modèles les plus probants, nous allons passer par une validation croisée en 10 blocs (donnant donc environ 90 % de données par échantillons d'apprentissage à chaque itération).
+
+Quand tous cela sera fait, nous pourrons nous intéresser aux taux d'erreur de classification, les courbes ROC et leur AUC respectif, qui aide à la prise de décision quant au meilleur des modèles.
+
+```{r}
+# On fixe notre nombre de bloc
+K <- 10
+```
+
+## Travail sur le jeu de données `Challenger1`
+
+### Régression logistique : réduction de la dimension
+
+Une régression logistique sur les données peut être un premier bon indicateur sur les variables qui expliquent le mieux la variable cible. En supprimant des variables peu significatives sur un modèle de base complet ($Y$ / `Win_Team` fonction de toutes les autres variables), on peut réduire la dimension de notre problème, ce qui est préférable avec 26 000 matchs à traiter et 10 blocs de validations croisées. Avec ses 24 variables, les algorithmes d'optimisation de critères AIC / BIC tels que __`step`__ (que nous utiliserons) ou __`bestglm`__ fonctionneront dans un temps "raisonnable" pour `Challenger2`. En revanche avec les 41 variables de `Challenger1`, l'exécution des algorithmes sera nettement plus longue. Si l'on peut par exemple diviser par deux voir trois le nombre de variables de notre premier jeu de données, il n'en serait que bénéfique pour la suite.
+
+Avec le test de Wald sur un modèle complet, nous pouvons savoir quelles variables sont véritablement importantes pour la régression. On rejettera donc les variables avec une probabilité critique du test supérieur à 0.05. Nous les rejetterons  individuellement si celles-ci sont neutres (comme `Duration` par exemple, commune au deux équipes), ou nous rejetterons un **duo de variables de même nature** (par exemple si `blueDeath` est à rejeter selon le test mais pas `redDeath`, alors quelles ont la même signification d'une équipe à l'autre, on rejettera `redDeath` également).
+
+```{r, message=FALSE, warning=FALSE}
+C1_modcomplet <-
+  glm(formula = Win_Team ~ .,
+      data = Challenger1,
+      family = binomial)
+
+C1_Anova1 <-
+  Anova(C1_modcomplet, type = 3, test.statistic = "Wald") %>%
+  as.data.frame %>%
+  mutate(var = rownames(.),
+         var_duo = if_else(
+           str_detect(var, "blue"),
+           str_replace(var, "blue", "red"),
+           if_else(str_detect(var, "red"), str_replace(var, "red", "blue"), var)
+         )) %>%
+  filter(`Pr(>Chisq)` > 0.05 & var != "(Intercept)")
+
+C1_Anova1
+
+to_delete1 <- c(C1_Anova1$var, C1_Anova1$var_duo) %>% unique()
+to_delete1
+```
+
+Avec ce premier test, on supprime plus d'une vingtaine de variable, et nous allons réitérer le test de Wald sur le jeu de données réduit pour voir si l'on peut encore réduire la dimension.
+
+```{r, message=FALSE, warning=FALSE}
+Challenger1_reduced <- select(Challenger1, -to_delete1)
+
+C1_modredu <- glm(formula = Win_Team ~ .,
+                  data = Challenger1_reduced,
+                  family = binomial)
+
+C1_Anova2 <-
+  Anova(C1_modredu, type = 3, test.statistic = "Wald") %>%
+  as.data.frame %>%
+  mutate(var = rownames(.),
+         var_duo = if_else(
+           str_detect(var, "blue"),
+           str_replace(var, "blue", "red"),
+           if_else(str_detect(var, "red"), str_replace(var, "red", "blue"), var)
+         )) %>%
+  filter(`Pr(>Chisq)` > 0.05 & var != "(Intercept)")
+
+C1_Anova2
+
+to_delete2 <- c(C1_Anova2$var, C1_Anova2$var_duo) %>% unique()
+to_delete2
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+Challenger1_reduced <- select(Challenger1_reduced, -to_delete2)
+
+C1_modredu <- glm(formula = Win_Team ~ .,
+                  data = Challenger1_reduced,
+                  family = binomial)
+
+C1_Anova3 <-
+  Anova(C1_modredu, type = 3, test.statistic = "Wald") %>%
+  as.data.frame %>%
+  mutate(var = rownames(.),
+         var_duo = if_else(
+           str_detect(var, "blue"),
+           str_replace(var, "blue", "red"),
+           if_else(str_detect(var, "red"), str_replace(var, "red", "blue"), var)
+         )) %>%
+  filter(`Pr(>Chisq)` > 0.05 & var != "(Intercept)")
+
+C1_Anova3
+```
+
+Après 3 itérations, il n'y a plus de variable a supprimé et nous arrivons à un jeu de données de 17 variables contre 41 au départ. Avec ce jeu réduit, nous pourrons, en plus de la régression logistique, de l'arbre de classification et de la forêt aléatoire, passer par des modèles de régression logistiques d'AIC et de BIC optimisé par la fonction `step`.
+
+```{r}
+head(Challenger1_reduced, 5)
+```
+
+### Arbre de classification : élagage optimal par $\alpha$ / `cp`
+
+Pour les arbres de classification, le problème algorithmique réside dans la complexité de l'arbre. A-t-on besoin d'un arbre de petite ou grande profondeur pour bien classer les individus ? A quel niveau peut-on élaguer l'arbre sans commettre une erreur trop importante de prédiction ? Si nous n'allons pas construire d'arbre définitif dès maintenant, nous devons nous faire une idée du paramètre de complexité $\alpha$ / `cp` à entrer pour la fonction `rpart`.
+
+Pour ce faire, nous allons construire successivement des arbres avec les paramètres `cp` valant $\{1^{-1}, 1^{-2}, \dots, 1^{-10}\}$. De ces arbres, nous allons voir lesquels arrive à une erreur de classification minimal, et nous sélectionnerons l'arbre correspondant au paramètre de complexité le plus grand.
+
+De cette manière, lorsque l'on effectuera la validation croisée, le paramètre `cp` qui sera entré en initialisation de `rpart` sera celui que nous allons trouver ici. Pour avoir des résultats stables, on fixe une graine aléatoire à chaque itération.
+
+<p class="emp">Sur `Challenger1`</p>
+
+```{r, warning=FALSE, message=FALSE}
+cps_to_test <-
+  c(1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10)
+
+C1C_df <- matrix(0, nrow = length(cps_to_test), ncol = 2) %>% as.data.frame()
+names(C1C_df) <- c("cp", "min_error")
+C1C_df <- C1C_df %>% mutate(cp = cps_to_test)
+
+cl <- makePSOCKcluster(7)
+registerDoParallel(cl)
+for (i in 1:nrow(C1C_df)) {
+  set.seed(42069)
+  C1C_Tree_Table <- rpart(Win_Team ~ .,
+                          data = Challenger1,
+                          minsplit = 2,
+                          cp = cps_to_test[i])$cptable %>% as.data.frame()
+  
+  min_er <- min(C1C_Tree_Table$xerror)
+  C1C_df[i, 2] <- min_er
+}
+stopCluster(cl)
+```
+
+Pour `Challenger1`, on prendra `cp = 1e-5`, même si l'erreur est déjà minimisée à `cp = 1e-4`. Avec une puissance négative de 10 supplémentaire pour ce paramètre, nous nous assurons de ne pas faire d'erreur.
+
+```{r}
+C1C_df %>% filter(min_error == min(min_error))
+```
+
+<p class="emp">Sur `Challenger1_reduced`</p>
+
+Pour `Challenger1_reduced`, on prendra `cp = 1e-6`, même si l'erreur est déjà minimisée à `cp = 1e-5`. 
+
+```{r, warning=FALSE, message=FALSE}
+C1R_df <- matrix(0, nrow = length(cps_to_test), ncol = 2) %>% as.data.frame()
+names(C1R_df) <- c("cp", "min_error")
+C1R_df <- C1R_df %>% mutate(cp = cps_to_test)
+
+cl <- makePSOCKcluster(7)
+registerDoParallel(cl)
+for (i in 1:nrow(C1R_df)) {
+  set.seed(42069)
+  C1R_Tree_Table <- rpart(Win_Team ~ .,
+                          data = Challenger1_reduced,
+                          minsplit = 2,
+                          cp = cps_to_test[i])$cptable %>% as.data.frame()
+  
+  min_er <- min(C1R_Tree_Table$xerror)
+  C1R_df[i, 2] <- min_er
+}
+stopCluster(cl)
+
+C1R_df %>% filter(min_error == min(min_error))
+```
+
+### Mise en œuvre
+
+Les noms de chaque méthodes utilisées ou dataframe générés seront préfixés par **`C1C`** pour ce qui concerne le jeu de données "**C**hallenger**1**" **C**omplet, **`C1R`** pour pour ce qui concerne le jeu de données "**C**hallenger**1**_**r**educed".
+
+<p class="emp">Avec `Challenger1`</p>
+
+```{r, warning=FALSE, message=FALSE}
+# Création des 10 blocs
+set.seed(42069)
+kfolds <- createFolds(1:nrow(Challenger1), k = K)
+
+# Initialisation de la matrice des prédictions
+C1C_Score <-
+  matrix(0, nrow = nrow(Challenger1), ncol = 3) %>% as.data.frame()
+
+# On y précise le nom des méthodes utilisées
+names(C1C_Score) <- c("C1C_RegLog", "C1C_Tree", "C1C_Forest")
+
+# Itération sur les 10 blocs avec multiprocessing
+cl <- makePSOCKcluster(7)
+registerDoParallel(cl)
+for (j in 1:K) {
+  
+  # Séparation en échantillon apprentissage / test
+  dappr <- Challenger1[-kfolds[[j]],]
+  dtest <- Challenger1[kfolds[[j]],]
+  
+  # Régression logistique
+  reglog <- glm(formula = Win_Team ~ .,
+                data = dappr,
+                family = binomial)
+  
+  # Arbre de classification
+  tree <- rpart(Win_Team ~ .,
+                data = dtest,
+                minsplit = 2,
+                cp = 1e-5)
+  
+  cp_opt <-
+    tree$cptable %>%
+    as.data.frame() %>%
+    filter(xerror == min(xerror)) %>%
+    slice(1) %>%
+    dplyr::select(CP) %>%
+    as.numeric()
+  
+  opt <- prune(tree, cp = cp_opt) # Arbre optimale pour le k-ème bloc
+  
+  # Random Forest
+  forest <- ranger(Win_Team ~ ., data = dappr, probability = TRUE)
+  
+  # Insertion des valeurs prédites
+  C1C_Score[kfolds[[j]], 1] <- predict(reglog, newdata = dtest, type = "response") %>% as.numeric
+  C1C_Score[kfolds[[j]], 2] <- predict(opt, newdata = dtest, type = "prob")[, 2]
+  C1C_Score[kfolds[[j]], 3] <- predict(forest, data = dtest)$predictions[, 2]
+  
+}
+stopCluster(cl)
+
+
+# Ajout des véritables résultats
+C1C_Score <- C1C_Score %>% mutate(obs = Challenger1$Win_Team)
+
+# Calcul des AUC
+AUC <-
+  C1C_Score %>%
+  gather(key = "Method", value = "Score",-obs) %>%
+  group_by(Method) %>%
+  summarize(AUC = auc(obs, Score)) %>%
+  arrange(desc(AUC))
+
+# Calcul des erreurs de prévisions
+prev <-
+  C1C_Score %>%
+  mutate_at(1:3, round) %>%
+  mutate(obs = Challenger1$Win_Team) %>%
+  summarise_at(1:3,  ~ mean(obs != .)) %>%
+  t %>%
+  as.data.frame() %>%
+  mutate(Method = rownames(.)) %>%
+  subset(select = c(Method, V1)) %>%
+  arrange(V1) %>%
+  rename(PredError = V1)
+
+# Jointure dans un tableau unique
+C1C_Res <- inner_join(prev, AUC)
+```
+
+<p class="emp">Avec `Challenger1_reduced`</p>
+
+```{r, warning=FALSE, message=FALSE}
+# Création des 10 blocs
+set.seed(42069)
+kfolds <- createFolds(1:nrow(Challenger1_reduced), k = K)
+
+# Initialisation de la matrice des prédictions
+C1R_Score <-
+  matrix(0, nrow = nrow(Challenger1_reduced), ncol = 5) %>% as.data.frame()
+
+# On y précise le nom des méthodes utilisées
+names(C1R_Score) <- c("C1R_RegLog", "C1R_stepAIC", "C1R_stepBIC","C1R_Tree", "C1R_Forest")
+
+# Itération sur les 10 blocs avec multiprocessing
+for (j in 1:K) {
+  
+  # Séparation en échantillon apprentissage / test
+  dappr <- Challenger1_reduced[-kfolds[[j]],]
+  dtest <- Challenger1_reduced[kfolds[[j]],]
+  
+  # Régression logistique
+  reglog <- glm(formula = Win_Team ~ .,
+                data = dappr,
+                family = binomial)
+  
+  # step - AIC
+  cl <- makePSOCKcluster(7)
+  registerDoParallel(cl)
+  stepAIC <- step(reglog, direction = "both", trace = 0)
+  stopCluster(cl)
+  
+  ?step
+  
+  # step - BIC
+  cl <- makePSOCKcluster(7)
+  registerDoParallel(cl)
+  stepBIC <- step(reglog, direction = "both", k = log(nrow(dappr)), trace = 0)
+  stopCluster(cl)
+  
+  # Arbre de classification
+  tree <- rpart(Win_Team ~ .,
+                data = dtest,
+                minsplit = 2,
+                cp = 1e-6)
+  
+  cp_opt <-
+    tree$cptable %>%
+    as.data.frame() %>%
+    filter(xerror == min(xerror)) %>%
+    slice(1) %>%
+    dplyr::select(CP) %>%
+    as.numeric()
+  
+  opt <- prune(tree, cp = cp_opt) # Arbre optimale pour le k-ème bloc
+  
+  # Random Forest
+  forest <- ranger(Win_Team ~ ., data = dappr, probability = TRUE)
+  
+  # Insertion des valeurs prédites
+  C1R_Score[kfolds[[j]], 1] <- predict(reglog, newdata = dtest, type = "response") %>% as.numeric
+  C1R_Score[kfolds[[j]], 2] <- predict(stepAIC, newdata = dtest, type = "response") %>% as.numeric
+  C1R_Score[kfolds[[j]], 3] <- predict(stepBIC, newdata = dtest, type = "response") %>% as.numeric
+  C1R_Score[kfolds[[j]], 4] <- predict(opt, newdata = dtest, type = "prob")[, 2]
+  C1R_Score[kfolds[[j]], 5] <- predict(forest, data = dtest)$predictions[, 2]
+  
+}
+
+# Ajout des véritables résultats
+C1R_Score <- C1R_Score %>% mutate(obs = Challenger1_reduced$Win_Team)
+
+# Calcul des AUC
+AUC <-
+  C1R_Score %>%
+  gather(key = "Method", value = "Score",-obs) %>%
+  group_by(Method) %>%
+  summarize(AUC = auc(obs, Score)) %>%
+  arrange(desc(AUC))
+
+# Calcul des erreurs de prévisions
+prev <-
+  C1R_Score %>%
+  mutate_at(1:5, round) %>%
+  mutate(obs = Challenger1_reduced$Win_Team) %>%
+  summarise_at(1:5,  ~ mean(obs != .)) %>%
+  t %>%
+  as.data.frame() %>%
+  mutate(Method = rownames(.)) %>%
+  subset(select = c(Method, V1)) %>%
+  arrange(V1) %>%
+  rename(PredError = V1)
+
+# Jointure dans un tableau unique
+C1R_Res <- inner_join(prev, AUC)
+```
+
+## Travail sur le jeu de données `Challenger2`
+
+### Régression logistique : réduction de la dimension
+
+De même qu'avec le jeu de données `Challenger1`, nous allons voir si l'on peut ou non réduire la dimension du jeu de données.
+
+```{r, message=FALSE, warning=FALSE}
+C2_modcomplet <-
+  glm(formula = Win_Team ~ .,
+      data = Challenger2,
+      family = binomial)
+
+C2_Anova1 <-
+  Anova(C2_modcomplet, type = 3, test.statistic = "Wald") %>%
+  as.data.frame %>%
+  mutate(var = rownames(.)) %>%
+  filter(`Pr(>Chisq)` > 0.05 & var != "(Intercept)")
+
+C2_Anova1
+
+to_delete1 <- c(C2_Anova1$var)
+to_delete1
+```
+
+Avec ce premier test, on supprime plus d'une vingtaine de variable, et nous allons réitérer le test de Wald sur le jeu de données réduit pour voir si l'on peut encore réduire la dimension.
+
+```{r, message=FALSE, warning=FALSE}
+Challenger2_reduced <- select(Challenger2, -to_delete1)
+
+C2_modredu <- glm(formula = Win_Team ~ .,
+                  data = Challenger2_reduced,
+                  family = binomial)
+
+C2_Anova2 <-
+  Anova(C2_modredu, type = 3, test.statistic = "Wald") %>%
+  as.data.frame %>%
+  mutate(var = rownames(.)) %>%
+  filter(`Pr(>Chisq)` > 0.05 & var != "(Intercept)")
+
+C2_Anova2
+```
+
+Nous passons donc avec `Challenger2_reduced` de 24 à 15 variables.
+
+```{r}
+head(Challenger2_reduced)
+```
+
+### Arbre de classification : élagage optimal par $\alpha$ / `cp`
+
+De même qu'avec le jeu de données `Challenger1` et `Challenger1_reduced`, nous allons chercher la valeur optimale de paramètre `cp` sur les jeux de données `Challenger2` & `Challenger2_reduced`.
+
+<p class="emp">Sur `Challenger2`</p>
+
+```{r, warning=FALSE, message=FALSE}
+cps_to_test <-
+  c(1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10)
+
+C2C_df <- matrix(0, nrow = length(cps_to_test), ncol = 2) %>% as.data.frame()
+names(C2C_df) <- c("cp", "min_error")
+C2C_df <- C2C_df %>% mutate(cp = cps_to_test)
+
+cl <- makePSOCKcluster(7)
+registerDoParallel(cl)
+for (i in 1:nrow(C1C_df)) {
+  set.seed(42069)
+  C2C_Tree_Table <- rpart(Win_Team ~ .,
+                          data = Challenger2,
+                          minsplit = 2,
+                          cp = cps_to_test[i])$cptable %>% as.data.frame()
+  
+  min_er <- min(C2C_Tree_Table$xerror)
+  C2C_df[i, 2] <- min_er
+}
+stopCluster(cl)
+```
+
+Pour `Challenger2`, nous prendrons `cp = 1e-5`, même si l'erreur est déjà minimisée à `cp = 1e-4`. Avec une puissance négative de 10 supplémentaire pour ce paramètre, nous nous assurons de ne pas faire d'erreur.
+
+```{r}
+C2C_df %>% filter(min_error == min(min_error))
+```
+
+<p class="emp">Sur `Challenger2_reduced`</p>
+
+Pour `Challenger2_reduced`, nous prendrons `cp = 1e-6`, même si l'erreur est déjà minimisée à `cp = 1e-5`. 
+
+```{r, warning=FALSE, message=FALSE}
+C2R_df <- matrix(0, nrow = length(cps_to_test), ncol = 2) %>% as.data.frame()
+names(C2R_df) <- c("cp", "min_error")
+C2R_df <- C2R_df %>% mutate(cp = cps_to_test)
+
+cl <- makePSOCKcluster(7)
+registerDoParallel(cl)
+for (i in 1:nrow(C1R_df)) {
+  set.seed(42069)
+  C2R_Tree_Table <- rpart(Win_Team ~ .,
+                          data = Challenger2_reduced,
+                          minsplit = 2,
+                          cp = cps_to_test[i])$cptable %>% as.data.frame()
+  
+  min_er <- min(C2R_Tree_Table$xerror)
+  C2R_df[i, 2] <- min_er
+}
+stopCluster(cl)
+
+C2R_df %>% filter(min_error == min(min_error))
+```
+
+### Mise en œuvre
+
+Les noms de chaque méthodes utilisées ou dataframe généré seront préfixés par **`C2C`** pour ce qui concerne le jeu de données "**C**hallenger**2**" **C**omplet, **`C2R`** pour ce qui concerne le jeu de données "**C**hallenger**2**_**r**educed".
+
+<p class="emp">Avec `Challenger2`</p>
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(42069)
+kfolds <- createFolds(1:nrow(Challenger2), k = K)
+
+C2C_Score <-
+  matrix(0, nrow = nrow(Challenger2), ncol = 3) %>% as.data.frame()
+names(C2C_Score) <- c("C2C_RegLog", "C2C_Tree", "C2C_Forest")
+
+cl <- makePSOCKcluster(7)
+registerDoParallel(cl)
+for (j in 1:K) {
+  dappr <- Challenger2[-kfolds[[j]],]
+  dtest <- Challenger2[kfolds[[j]],]
+  
+  reglog <- glm(formula = Win_Team ~ .,
+                data = dappr,
+                family = binomial)
+  
+  tree <- rpart(Win_Team ~ .,
+                data = dtest,
+                minsplit = 2,
+                cp = 1e-5)
+  cp_opt <-
+    tree$cptable %>%
+    as.data.frame() %>%
+    filter(xerror == min(xerror)) %>%
+    slice(1) %>%
+    dplyr::select(CP) %>%
+    as.numeric()
+  
+  opt <- prune(tree, cp = cp_opt)
+  
+  forest <- ranger(Win_Team ~ ., data = dappr, probability = TRUE)
+  
+  C2C_Score[kfolds[[j]], 1] <- predict(reglog, newdata = dtest, type = "response") %>% as.numeric
+  C2C_Score[kfolds[[j]], 2] <- predict(opt, newdata = dtest, type = "prob")[, 2]
+  C2C_Score[kfolds[[j]], 3] <- predict(forest, data = dtest)$predictions[, 2]
+  
+}
+stopCluster(cl)
+
+C2C_Score <- C2C_Score %>% mutate(obs = Challenger2$Win_Team)
+
+AUC <-
+  C2C_Score %>%
+  gather(key = "Method", value = "Score",-obs) %>%
+  group_by(Method) %>%
+  summarize(AUC = auc(obs, Score)) %>%
+  arrange(desc(AUC))
+
+prev <-
+  C2C_Score %>%
+  mutate_at(1:3, round) %>%
+  mutate(obs = Challenger2$Win_Team) %>%
+  summarise_at(1:3,  ~ mean(obs != .)) %>%
+  t %>%
+  as.data.frame() %>%
+  mutate(Method = rownames(.)) %>%
+  subset(select = c(Method, V1)) %>%
+  arrange(V1) %>%
+  rename(PredError = V1)
+
+C2C_Res <- inner_join(prev, AUC)
+```
+
+<p class="emp">Avec `Challenger2_reduced`</p>
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(42069)
+kfolds <- createFolds(1:nrow(Challenger2_reduced), k = K)
+
+C2R_Score <-
+  matrix(0, nrow = nrow(Challenger2_reduced), ncol = 5) %>% as.data.frame()
+
+names(C2R_Score) <- c("C2R_RegLog", "C2R_stepAIC", "C2R_stepBIC","C2R_Tree", "C2R_Forest")
+
+for (j in 1:K) {
+  
+  dappr <- Challenger2_reduced[-kfolds[[j]],]
+  dtest <- Challenger2_reduced[kfolds[[j]],]
+  
+  reglog <- glm(formula = Win_Team ~ .,
+                data = dappr,
+                family = binomial)
+  
+  cl <- makePSOCKcluster(7)
+  registerDoParallel(cl)
+  stepAIC <- step(reglog, direction = "both", trace = 0)
+  stopCluster(cl)
+  
+  cl <- makePSOCKcluster(7)
+  registerDoParallel(cl)
+  stepBIC <- step(reglog, direction = "both", k = log(nrow(dappr)), trace = 0)
+  stopCluster(cl)
+  
+  tree <- rpart(Win_Team ~ .,
+                data = dtest,
+                minsplit = 2,
+                cp = 1e-6)
+  
+  cp_opt <-
+    tree$cptable %>%
+    as.data.frame() %>%
+    filter(xerror == min(xerror)) %>%
+    slice(1) %>%
+    dplyr::select(CP) %>%
+    as.numeric()
+  
+  opt <- prune(tree, cp = cp_opt)
+  
+  forest <- ranger(Win_Team ~ ., data = dappr, probability = TRUE)
+  
+  C2R_Score[kfolds[[j]], 1] <- predict(reglog, newdata = dtest, type = "response") %>% as.numeric
+  C2R_Score[kfolds[[j]], 2] <- predict(stepAIC, newdata = dtest, type = "response") %>% as.numeric
+  C2R_Score[kfolds[[j]], 3] <- predict(stepBIC, newdata = dtest, type = "response") %>% as.numeric
+  C2R_Score[kfolds[[j]], 4] <- predict(opt, newdata = dtest, type = "prob")[, 2]
+  C2R_Score[kfolds[[j]], 5] <- predict(forest, data = dtest)$predictions[, 2]
+  
+}
+
+C2R_Score <- C2R_Score %>% mutate(obs = Challenger2_reduced$Win_Team)
+
+AUC <-
+  C2R_Score %>%
+  gather(key = "Method", value = "Score",-obs) %>%
+  group_by(Method) %>%
+  summarize(AUC = auc(obs, Score)) %>%
+  arrange(desc(AUC))
+
+prev <-
+  C2R_Score %>%
+  mutate_at(1:5, round) %>%
+  mutate(obs = Challenger2_reduced$Win_Team) %>%
+  summarise_at(1:5,  ~ mean(obs != .)) %>%
+  t %>%
+  as.data.frame() %>%
+  mutate(Method = rownames(.)) %>%
+  subset(select = c(Method, V1)) %>%
+  arrange(V1) %>%
+  rename(PredError = V1)
+
+C2R_Res <- inner_join(prev, AUC)
+```
+
+# Conclusions de l'étude
+
+## Analyse des résultats
+
+**La courbe ROC** est un moyen de visualiser la performance des scores que nous avons créés. Les courbes ROC vivent dans $[0,1]^2$ ; les scores les moins performants sont représentés par des courbes proches de la premières bissectrices, là où les scores les plus performants "font l'angle supérieur gauche" du carré de côté 1. L'équation des courbes ROC s'écrit ainsi :
+
+$$
+\begin{cases}
+x(s) = \alpha(s)=1-sp(s) = P(S(X)) > s|Y=0) \\
+y(s) = 1-\beta(s)=se(s) = P(S(X)) \ge s|Y=1)
+\end{cases}
+$$
+
+**L'AUC**, aire sous la courbe ROC, est donc un critère mesurant le risque de classé les individus non convenablement. Plus l'AUC est proche de 1 (aire total du carré de côté 1), meilleur est le score, et à l'inverse, plus celui-ci est proche de 0.5 (demi-aire du carré de côté 1), moins bon est le score.
+
+Mais alors, quels résultats avons-nous avec tous nos scores ? En vérité, il s'avère que toutes nos constructions se valent si l'on se réfère exclusivement aux courbes ROC. Les résultats sont tous plutôt bons au regard des courbes, et mêmes en zoomant dans le coin supérieur gauche, il est encore difficile de discerner la meilleure méthode parmi les meilleures.
+
+```{r}
+C1C_Score_v2 <-
+  C1C_Score %>% gather(key = "Method", value = "Score", -obs)
+
+C1R_Score_v2 <-
+  C1R_Score %>% gather(key = "Method", value = "Score", -obs)
+
+C2C_Score_v2 <-
+  C2C_Score %>% gather(key = "Method", value = "Score", -obs)
+
+C2R_Score_v2 <-
+  C2R_Score %>% gather(key = "Method", value = "Score", -obs)
+
+All_Score <- rbind(C1C_Score_v2, C1R_Score_v2, C2C_Score_v2, C2R_Score_v2)
+
+rocplot <-
+  ggplot(All_Score) + aes(m = Score,
+                          d = as.numeric(obs) - 1,
+                          color = Method) + geom_roc()
+rocplot
+rocplot + coord_cartesian(xlim = c(0, 0.05), ylim = c(0.95, 1))
+```
+
+Le mieux dans ce cas, c'est de se référer directement aux AUC, mais également aux taux d'erreur de chaque constructions.
+
+```{r}
+rbind(C1C_Res, C1R_Res, C2C_Res, C2R_Res) %>%
+  mutate(rankError = dense_rank(PredError), rankAUC = dense_rank(desc(AUC))) %>%
+  arrange(PredError, desc(AUC))
+```
+
+Et dans le haut du classement, on y discerne 4 méthodes qui se dégagent des autres par, en plus d'un AUC supérieur à 0.999, leur taux d'erreur sont inférieur à 1 %. Ce sont les __régressions logistiques de `Challenger1` et `Challenger1_reduced`__, très certainement favorisées par la quantité de données et le nombre de variables. A noté que les modèles créés avec `step` pour minimiser l'AIC des régressions logistiques présentent les mêmes résultats que les modèles complets. Les AIC des modèles complets semblait donc déjà minimaux.
+
+Si nous ne devions retenir qu'une méthode au vu des résultats, nous sélectionnerons celle qui arrive en tête en termes de taux d'erreur et d'AUC : **`C1C_RegLog`**, **la régression linéaire de `Win_Team` par rapport à toutes les variables de `Challenger1`**.
+
+## Méthode d'application
+
+Et maintenant comment mettre en œuvre cet algorithme pour les futures parties de League of Legends ? Une partie va avoir lieux entre deux équipes, comment devons-nous nous y prendre pour dire "cette équipe a le plus de chance de l'emporter selon mes travaux" ?
+
+* Tout d'abord on ne peut connaître réellement l'issue d'une partie avant que celle-ci ne soit fini. On peut se faire une idée si l'on a connaissance des acteurs de la partie, mais c'est bien tout ce que l'on peut se faire, une idée du vainqueur. Par ailleurs, l'ensemble des statistiques ayant servis à la modélisation n'existe pas encore puisque la partie n'a pas débuté.
+* Ce que nous pouvons avoir en revanche, ce sont les statistiques individuelles moyennes de chaque acteur de la partie avant le début de celle-ci. Un joueur comptabilise un nombre de kill moyen par partie, un nombre de gold amassé moyen par partie, etc. En faisant pour les deux équipes *"les moyennes des statistiques moyennes"* de chaque joueur, nous aurions des données similaires à ce que nous avons pour nos modèles.
+* Il serait également possible de calculé nos estimations de victoires / défaites pendant la partie en récupérant en temps réel les statistiques du match en cours et en les "injectant" dans nos modèles prédictifs à intervalles réguliers. Toutes les 30 secondes ou toutes les 5 minutes, c'est désormais plus une question de vitesse de calcul et d'efficacité. A voir aussi à qui cela servirait, pour les parieurs et sites de pari (e-)sportifs éventuellement.
+
+On peut aussi s'intéresser à la probabilité estimée avant le match pour les deux équipes de s'imposer selon les informations récoltées précédemment dans le cadre d'attribution de points. Classements  et jeux en ligne compétitifs vont de pair et l'on pourrait très bien construire un classement des joueurs selon ces probabilités estimées. 
+
+Prenons deux équipes, bleu contre rouge. Avant le match, au vu de la composition des équipes (des statistiques individuelles de chaque joueur que nous évoquions précédemment), on estime que **l'équipe bleu a le plus de chance de perdre la rencontre**. Prenons un cas extrême même : l'équipe bleu est composée de joueur arrivant tous juste dans la division / *elo* "Challenger", alors que l'équipe rouge est composée de joueurs habitués à ce niveau de jeu. La partie se finit et vient l'heure d'attribué les points pour le classement des joueurs :
+
+* Si l'équipe bleu l'emporte "contre toutes attentes", on pourrait récompenser les membres de l'équipe bleu par un **gain de point inversement proportionnel à leurs chances de victoire calculées avant le match** (très faible à l'origine). Réciproquement, on pourrait pénaliser l'équipe rouge par **une perte significative de point inversement proportionnel à leurs chances de défaites calculées avant le match**, car, au vu du niveau de chacun des membres, les rouges devaient s'imposer.
+* Si l'équipe rouge, favorite à l'origine, l'emportait "en toute logique", alors on accorderait des points aux membres de l'équipe rouge mais dans une moindre mesure, puisqu'il s'agissait du résultat attendu. Et de même manière, la perte de points pour les joueurs bleus serait minime.
+
+Un système de ce type permettrait une distribution / un retrait de point équitable entre des équipes de mêmes niveau, et qui récompenserait les équipes qui déjouent les pronostics.
+
+```{r, echo=FALSE}
+save.image()
+```
